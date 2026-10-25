@@ -10,7 +10,7 @@ import { getSetting } from '@/data/db';
 import { sundayState, type SundayState } from '@/data/game';
 import { currentAsk, markAsk, recordOpen, type CurrentAsk } from '@/data/journey';
 import { loadMoney, onRefreshed, refreshAll, type Money } from '@/data/refresh';
-import type { Txn } from '@/domain/detect';
+import { payeeOf, type Txn } from '@/domain/detect';
 import type { SafeToSpend } from '@/domain/safeToSpend';
 import { deviceToken, track } from '@/lib/device';
 import { formatDate, formatMoney, plural } from '@/lib/format';
@@ -252,7 +252,7 @@ function Latest({ txns }: { txns: Txn[] }) {
         latest.map((t) => (
           <TransactionRow
             key={t.id}
-            merchant={t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee'}
+            merchant={payeeOf(t)}
             category={t.accountLast4 ? `A/c ${t.accountLast4}` : undefined}
             date={new Date(t.date)}
             money={{ amountMinor: t.direction === 'debit' ? -t.amountMinor : t.amountMinor, currency: 'INR' }}

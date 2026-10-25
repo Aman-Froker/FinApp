@@ -11,19 +11,31 @@ const BALANCE_BEFORE = /(?:(?:\b|avl|avbl|aval)bal(?:ance)?|\blimit|\blmt)\b[^\d
 // "AvlBal" is written as one word by some banks, so the prefix and "bal" may touch.
 const BALANCE = /(?:\b(?:avl|avbl|aval|avail(?:able)?)\.?\s*bal(?:ance)?|\bbal(?:ance)?)\b(?:\s+is)?[\s:-]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i;
 // Masked digits only, so a phone number or reference is never taken for an account.
-const ACCOUNT = /\b(?:a\/c|acct|account|ac|card)\b(?:\s*no\.?)?\s*(?:ending\s*(?:with\s*)?)?[x*]+\s?(\d{3,4})\b/i;
+// "XX123456" is the same account as "XX3456": the last four digits are kept.
+const ACCOUNT = /\b(?:a\/c|acct|account|ac|card)\b(?:\s*no\.?)?\s*(?:ending\s*(?:with\s*)?)?[x*]+\s?\d*?(\d{4}|\d{3})\b/i;
 const REFERENCE = /(?:\bref(?:erence)?\b(?:\s*(?:no\.?|number))?(?:\s+is)?|\brefno\b|\butr\b|\bupi\b(?:\s*ref(?:\s*no)?)?)[\s:.#-]*(\d{9,})/i;
 const UPI_PATH_NAME_AFTER = /UPI\/(?:P2[AM]\/)?\d{6,}\/([A-Za-z][^/\n.]*?)(?:\/|\.|\s{2,}|\n|$)/i;
 const UPI_PATH_NAME_BEFORE = /UPI\/([A-Za-z][^/\n]*?)\/\d{6,}/i;
+// "Info- NEFT/CITIN26123456/ACME TECH PVT LTD", "IMPS/P2A/629301234567/RAHUL K": the payer after the reference.
+const BANK_PATH_NAME = /\b(?:NEFT|IMPS|RTGS)[/-](?:P2[AM][/-])?(?:[A-Z]{4}[A-Z0-9]*\d[A-Z0-9]*|\d{6,})[/-]([A-Za-z][A-Za-z .&'-]{1,40}?)(?:[/-]|\.\s|\.(?=[A-Z])|\s{2,}|\n|\.?$)/;
 const UPI_PATH_REF = /UPI\/(?:P2[AM]\/)?(\d{9,})|UPI\/[A-Za-z][^/\n]*?\/(\d{9,})/i;
+// The party is never an instruction ("to process the auto-debit", "to block your card").
 // Later words may not be another preposition or an account word, so a name never spans "from Kotak Bank AC XX1122 to".
 const NAME = String.raw`[A-Za-z][\w&'-]*(?:\s+(?!(?:to|from|at|by|towards|a\/c|ac|acct|account)\b)[A-Za-z0-9][\w&'-]*){0,5}?`;
-const STOP = String.raw`(?=\s+(?:on|via|is|was|has|successful|for|using|ref|refno|avl|bal|info|not|upi|from|to|at|by)\b|\s*\.|\s*[(;,]|\s*\n|$)`;
-const PARTY = new RegExp(String.raw`\b(?:to|at|towards|by|from)\s+(?!(?:a\/c|your|ac|acct|account|vpa|upi|transfer|the|date|nach|ach|ecs|mandate)\b)(${NAME})${STOP}`, 'i');
+const STOP = String.raw`(?=\s+(?:on|via|is|was|has|successful(?:ly)?|for|using|ref|refno|avl|bal|info|not|upi|from|to|at|by)\b|\s*\.|\s*[(;,]|\s*\n|$)`;
+// A card payment gateway prefix ("RAZ*Swiggy", "PYU*Zepto") and "beneficiary" are not part of the name.
+const PARTY = new RegExp(String.raw`\b(?:to|at|towards|by|from)\s+(?:beneficiary\s+)?(?:[A-Z]{2,5}\s?\*)?(?!(?:a\/c|your|ac|acct|account|vpa|upi|transfer|the|date|nach|ach|ecs|mandate|process|maintain|ensure|avoid|block|report|dispute|call|check|view|know|stop|cancel|manage|revoke|continue|complete|keep|avail)\b)(${NAME})${STOP}`, 'i');
+// "towards subscription for ACME", "the subscription to ACME": the payee follows what was bought.
+const PURCHASE_PARTY = new RegExp(String.raw`\b(?:subscription|plan|order|membership)\s+(?:for|to|with|from)\s+(?:the\s+)?(${NAME})${STOP}`, 'i');
 // "towards NACH for NETFLIX": a mandate names its payee after the rail.
 const MANDATE_PARTY = new RegExp(String.raw`\b(?:nach|ach|ecs|mandate|autopay)\s+(?:for|of|towards|to)\s+(${NAME})${STOP}`, 'i');
 
+// "Your NEFT txn ... is credited to beneficiary Ravi": the money left the user's account.
+const TO_BENEFICIARY = /\bcredited to (?:the )?beneficiary\b/i;
+
 function directionAt(body: string): { type: 'debit' | 'credit'; index: number } | null {
+  const b = TO_BENEFICIARY.exec(body);
+  if (b) return { type: 'debit', index: b.index };
   const d = DEBIT.exec(body);
   const c = CREDIT.exec(body);
   if (!d && !c) return null;
@@ -57,7 +69,9 @@ export function genericFields(body: string): Fields {
   const party =
     UPI_PATH_NAME_AFTER.exec(body)?.[1] ??
     UPI_PATH_NAME_BEFORE.exec(body)?.[1] ??
+    BANK_PATH_NAME.exec(body)?.[1] ??
     MANDATE_PARTY.exec(body)?.[1] ??
+    PURCHASE_PARTY.exec(body)?.[1] ??
     PARTY.exec(body)?.[1] ??
     null;
   return {

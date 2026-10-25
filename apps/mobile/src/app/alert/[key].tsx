@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Card, EmptyState, ScreenHeader, Skeleton, StepScreen, Text, TransactionRow } from '@/components';
 import { getDb } from '@/data/db';
 import { loadMoney } from '@/data/refresh';
+import { payeeOf } from '@/domain/detect';
 
 type AlertRow = { key: string; title: string; body: string; fireAt: string; txnIds: string };
 
@@ -49,7 +50,7 @@ export default function AlertDetail() {
           {txns.map((t) => (
             <TransactionRow
               key={t.id}
-              merchant={t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee'}
+              merchant={payeeOf(t)}
               date={new Date(t.date)}
               money={{ amountMinor: t.direction === 'debit' ? -t.amountMinor : t.amountMinor, currency: 'INR' }}
               onPress={() => router.push({ pathname: '/transactions/[id]', params: { id: t.id } })}

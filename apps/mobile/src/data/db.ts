@@ -117,6 +117,18 @@ const MIGRATIONS = [
      dueDate TEXT NOT NULL,
      receivedAt TEXT NOT NULL
    );`,
+  // Message shapes learned from model answers on this phone, or shared by other phones.
+  `CREATE TABLE learned_rules (
+     header TEXT NOT NULL,
+     pattern TEXT NOT NULL,
+     groups TEXT NOT NULL,
+     type TEXT NOT NULL,
+     instrument TEXT NOT NULL,
+     status TEXT NOT NULL,
+     origin TEXT NOT NULL CHECK (origin IN ('device', 'shared')),
+     sentAt TEXT,
+     PRIMARY KEY (header, pattern)
+   );`,
 ];
 
 let opening: Promise<SQLite.SQLiteDatabase> | null = null;

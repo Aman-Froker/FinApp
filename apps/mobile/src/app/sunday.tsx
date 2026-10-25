@@ -10,7 +10,7 @@ import { editTransaction } from '@/data/ingest';
 import { saveLabels, shareLabels } from '@/data/labels';
 import { loadMoney, refreshAll, type Money } from '@/data/refresh';
 import { unknownSpend } from '@/domain/asks';
-import type { Txn } from '@/domain/detect';
+import { payeeOf, type Txn } from '@/domain/detect';
 import { accuracy, categoryOf, moneyIq, spendIn, streak, weekKey } from '@/domain/game';
 import { track } from '@/lib/device';
 import { formatDate, formatMoney, plural } from '@/lib/format';
@@ -176,7 +176,7 @@ function Play({ game, state, money }: { game: Game; state: SundayState; money: M
           {counted.txns.map((t) => (
             <TransactionRow
               key={t.id}
-              merchant={t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee'}
+              merchant={payeeOf(t)}
               date={new Date(t.date)}
               money={{ amountMinor: -t.amountMinor, currency: 'INR' }}
               onPress={() => setFixing(t)}
@@ -384,7 +384,7 @@ function WorthIt({ money, onDone }: { money: Money; onDone: Answers }) {
       <Text variant="caption" color="textSecondary">{`${i + 1} of ${recent.length}`}</Text>
       <Card>
         <Text variant="heading" numberOfLines={2}>
-          {t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee'}
+          {payeeOf(t)}
         </Text>
         <AmountText money={{ amountMinor: t.amountMinor, currency: 'INR' }} size="display" />
         <Text variant="body" color="textSecondary">

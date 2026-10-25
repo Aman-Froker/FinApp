@@ -27,9 +27,10 @@ export function headerOf(sender: string): string | null {
 
 export function instrumentOf(body: string): Instrument {
   const b = body.toLowerCase();
+  // A debit the user did not make by hand comes first, even when it ran over UPI or a card.
+  if (/nach|e-?mandate|auto-?pay|auto-?debit|standing instruction|\bsi\b|\bach\b|\becs\b/.test(b)) return 'nach';
   if (/\bupi\b|vpa|@[a-z]{2,}/.test(b)) return 'upi';
   if (/\bcard\b/.test(b)) return 'card';
-  if (/nach|e-?mandate|autopay|\bach\b/.test(b)) return 'nach';
   if (/\batm\b|cash withdrawal/.test(b)) return 'atm';
   if (/\bimps\b/.test(b)) return 'imps';
   if (/\bneft\b|\brtgs\b/.test(b)) return 'neft';
@@ -45,6 +46,9 @@ export function statusOf(body: string): 'success' | 'failed' | 'refund' {
 }
 
 export const VPA = /([a-z0-9._-]{2,}@[a-z]{2,})/i;
+
+// A card gateway prefix is not part of the merchant: "RAZ*Swiggy", "PAY*Swiggy", "PYU*Zepto".
+export const withoutGateway = (name: string) => name.replace(/^[A-Z]{2,5}\s?\*\s*(?=\S)/, '');
 
 export function tidy(s: string | undefined): string | null {
   const t = s?.replace(/\s+/g, ' ').trim();

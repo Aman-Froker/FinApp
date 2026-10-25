@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { retryServerDelete } from '@/lib/device';
 import { setUpNotifications } from '@/lib/notify';
 import { Sentry, sentryEnabled } from '@/lib/sentry';
 import { fonts } from '@/theme/fonts';
@@ -47,6 +48,8 @@ function Navigator() {
 
   useEffect(() => {
     setUpNotifications().catch(() => undefined);
+    // Finishes a delete-all that was made offline.
+    retryServerDelete().catch(() => false);
   }, []);
 
   // A tapped notification opens what it is about: home for the morning number, the alert otherwise.

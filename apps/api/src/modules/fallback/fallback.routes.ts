@@ -1,4 +1,5 @@
-import { fallbackRequestSchema, type FallbackRequest } from '@finapp/shared';
+import { safePattern } from '@finapp/parser';
+import { fallbackRequestSchema, learnedRulesBodySchema, type FallbackRequest, type LearnedRulesBody } from '@finapp/shared';
 import { Router, type Request } from 'express';
 
 import { env } from '../../config/env.js';
@@ -8,6 +9,7 @@ import { aiLimiter } from '../../middleware/rate-limit.js';
 import { validate } from '../../middleware/validate.js';
 import { FallbackRequestModel } from '../../models/fallback-request.js';
 import type { Extractor } from './extractor.js';
+import { rulesRepository } from './rules.repository.js';
 
 export function fallbackRouter(extractor: Extractor | null) {
   const router = Router();
@@ -37,6 +39,17 @@ export function fallbackRouter(extractor: Extractor | null) {
       res.json({ transaction });
     },
   );
+
+  // Learned message shapes: phones send theirs and fetch the ones others agree on.
+  router.post('/parse/rules', requireDevice, validate({ body: learnedRulesBodySchema }), async (req: Request<unknown, unknown, LearnedRulesBody>, res) => {
+    if (!req.body.rules.every((r) => safePattern(r.pattern, r.groups))) throw new AppError(400, 'unsafe_rule', 'A rule is not a learned message shape');
+    await rulesRepository.vote(req.deviceId!, req.body.rules);
+    res.status(202).end();
+  });
+
+  router.get('/parse/rules', requireDevice, async (_req, res) => {
+    res.json({ rules: await rulesRepository.shared() });
+  });
 
   return router;
 }

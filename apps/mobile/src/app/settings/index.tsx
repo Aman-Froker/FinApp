@@ -40,13 +40,16 @@ export default function Settings() {
         onPress: async () => {
           try {
             track('delete_requested');
-            await deleteAllData();
+            const result = await deleteAllData();
+            if (result === 'server_pending') {
+              Alert.alert('Deleted from this phone', 'We could not reach our server just now. Its copy will be deleted as soon as you are back online.');
+            }
             queryClient.clear();
             queryClient.setQueryData(['onboarding'], false);
             router.dismissAll();
             router.replace('/onboarding');
           } catch {
-            Alert.alert('Nothing was deleted', 'We could not reach the server. Check your connection and try again.');
+            Alert.alert('Something went wrong', 'Nothing was deleted. Please try again.');
           }
         },
       },

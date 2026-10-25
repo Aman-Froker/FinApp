@@ -2,7 +2,7 @@ import type { DeviceResponse } from '@finapp/shared';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-import { api } from './api';
+import { api, ApiError } from './api';
 import { cancelAllNotifications } from './notify';
 import { wipeLocalDb } from '@/data/db';
 
@@ -41,13 +41,31 @@ export function track(name: string, properties?: Props): void {
     });
 }
 
-// Server first: if it fails the user is told and the phone keeps its data, so nothing is half deleted.
-export async function deleteAllData(): Promise<void> {
+const PENDING_DELETE = 'finapp.pendingServerDelete';
+
+// The phone is wiped at once, online or not. The server copy is deleted now if it can be reached;
+// otherwise its token is kept aside and the deletion retried on every launch until it goes through.
+export async function deleteAllData(): Promise<'done' | 'server_pending'> {
   const stored = await SecureStore.getItemAsync(KEY);
-  if (stored) await api('/v1/devices/me', { method: 'DELETE', token: stored });
-  await SecureStore.deleteItemAsync(KEY);
-  pending = null;
   // Scheduled morning numbers and alerts carry figures from the deleted data.
   await cancelAllNotifications();
   await wipeLocalDb();
+  await SecureStore.deleteItemAsync(KEY);
+  pending = null;
+  if (!stored) return 'done';
+  await SecureStore.setItemAsync(PENDING_DELETE, stored);
+  return (await retryServerDelete()) ? 'done' : 'server_pending';
+}
+
+// True once the server holds nothing for the old device. A 401 means it is already gone.
+export async function retryServerDelete(): Promise<boolean> {
+  const token = await SecureStore.getItemAsync(PENDING_DELETE);
+  if (!token) return true;
+  try {
+    await api('/v1/devices/me', { method: 'DELETE', token });
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 401)) return false;
+  }
+  await SecureStore.deleteItemAsync(PENDING_DELETE);
+  return true;
 }

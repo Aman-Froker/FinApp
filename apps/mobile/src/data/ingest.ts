@@ -1,14 +1,11 @@
-import { amountsIn, isFinancial, maskForFallback, notice, parse, PARSER_VERSION, templateKey } from '@finapp/parser';
-import type { FallbackResponse } from '@finapp/shared';
+import { isFinancial, notice, parse, parseLearned, PARSER_VERSION, templateKey, type LearnedRule, type ParseInput } from '@finapp/parser';
 
 import { getDb, getSetting, setSetting } from './db';
 import { applyLabels } from './labels';
 import { SmsInbox, type InboxSms } from '../../modules/sms-inbox';
 import type { Balance, Mandate, Statement } from '@/domain/alerts';
 import { cardsFrom, type Card } from '@/domain/cards';
-import { detectRecurring, kindOf, pairSelfTransfers, type Kind, type Recurring, type Txn } from '@/domain/detect';
-import { api, ApiError } from '@/lib/api';
-import { deviceToken } from '@/lib/device';
+import { detectRecurring, kindOf, ownKeys, pairSelfTransfers, type Kind, type Recurring, type Txn } from '@/domain/detect';
 
 const HISTORY_DAYS = 365;
 const PAGE = 500;
@@ -40,9 +37,20 @@ export type TxnRow = {
   rule: string;
 };
 
+// The built-in rules first. A learned rule reads what they cannot, and where they read a message
+// without a payee it adds only the payee, never changing the direction or amount they found.
+export function read(input: ParseInput, learned: LearnedRule[]) {
+  const p = parse(input);
+  if (p?.counterparty || p?.counterpartyVpa) return p;
+  const l = parseLearned(input, learned);
+  if (!p) return l;
+  if (!l || l.type !== p.type || l.amountMinor !== p.amountMinor || !(l.counterparty || l.counterpartyVpa)) return p;
+  return { ...p, counterparty: l.counterparty, counterpartyVpa: l.counterpartyVpa, rule: 'learned' };
+}
+
 // Pure: personal messages, OTPs and promotions are dropped here and never reach the database.
 // Card statements and autopay registrations move no money but are kept for alerts.
-export function toRows(batch: InboxSms[]): { raws: RawRow[]; txns: TxnRow[] } {
+export function toRows(batch: InboxSms[], learned: LearnedRule[] = []): { raws: RawRow[]; txns: TxnRow[] } {
   const raws: RawRow[] = [];
   const txns: TxnRow[] = [];
   for (const sms of batch) {
@@ -52,7 +60,7 @@ export function toRows(batch: InboxSms[]): { raws: RawRow[]; txns: TxnRow[] } {
       if (n) raws.push({ id: sms.id, sender: sms.sender, body: sms.body, receivedAt: input.receivedAt, parsedStatus: 'parsed', rule: n.kind, templateKey: templateKey(sms.body) });
       continue;
     }
-    const p = parse(input);
+    const p = read(input, learned);
     raws.push({
       id: sms.id,
       sender: sms.sender,
@@ -95,10 +103,11 @@ export async function syncInbox(onProgress?: (p: SyncProgress) => void): Promise
   let since = Number((await getSetting('sms.since')) ?? Date.now() - HISTORY_DAYS * 86_400_000);
   const result: SyncResult = { scanned: 0, financial: 0, parsed: 0, seconds: 0 };
   const total = onProgress ? await SmsInbox.countInbox(since) : 0;
+  const learned = await learnedRules();
 
   for (;;) {
     const batch = await SmsInbox.readInbox(since, PAGE);
-    const { raws, txns } = toRows(batch);
+    const { raws, txns } = toRows(batch, learned);
     await db.withTransactionAsync(async () => {
       for (const r of raws) {
         await db.runAsync(
@@ -135,7 +144,7 @@ export async function syncInbox(onProgress?: (p: SyncProgress) => void): Promise
   return result;
 }
 
-const UPSERT_TXN = `INSERT INTO transactions (id, smsId, date, amountMinor, direction, kind, status, instrument, accountLast4,
+export const UPSERT_TXN = `INSERT INTO transactions (id, smsId, date, amountMinor, direction, kind, status, instrument, accountLast4,
     counterparty, counterpartyVpa, balanceAfterMinor, referenceNo, source, rule)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rule', ?)
   ON CONFLICT(id) DO UPDATE SET amountMinor = excluded.amountMinor, direction = excluded.direction, kind = excluded.kind,
@@ -153,7 +162,7 @@ async function reparseIfRulesChanged(): Promise<void> {
   const stored = await db.getAllAsync<{ id: string; sender: string; body: string; receivedAt: string; rule: string | null }>(
     'SELECT id, sender, body, receivedAt, rule FROM sms_raw',
   );
-  const { raws, txns } = toRows(stored.map((r) => ({ ...r, receivedAt: Date.parse(r.receivedAt) })));
+  const { raws, txns } = toRows(stored.map((r) => ({ ...r, receivedAt: Date.parse(r.receivedAt) })), await learnedRules());
   const kept = new Map(raws.map((r) => [r.id, r]));
   await db.withTransactionAsync(async () => {
     for (const old of stored) {
@@ -176,72 +185,32 @@ async function reparseIfRulesChanged(): Promise<void> {
   await setSetting('parser.version', String(PARSER_VERSION));
 }
 
+export async function learnedRules(): Promise<LearnedRule[]> {
+  const rows = await (await getDb()).getAllAsync<Omit<LearnedRule, 'groups'> & { groups: string }>(
+    'SELECT header, pattern, groups, type, instrument, status FROM learned_rules',
+  );
+  return rows.map((r) => ({ ...r, groups: JSON.parse(r.groups) as LearnedRule['groups'] }));
+}
+
 export async function loadHistory(): Promise<{ txns: Txn[]; recurring: Recurring[] }> {
   const txns = await allTransactions();
   return { txns, recurring: detectRecurring(txns) };
 }
 
-const TXN_COLUMNS = 'id, date, amountMinor, direction, kind, status, instrument, accountLast4, counterparty, counterpartyVpa, refundExpected, category';
+const TXN_COLUMNS = 'id, date, amountMinor, direction, kind, status, instrument, accountLast4, counterparty, counterpartyVpa, refundExpected, category, source';
 
 export async function allTransactions(): Promise<Txn[]> {
   return (await getDb()).getAllAsync<Txn>(`SELECT ${TXN_COLUMNS} FROM transactions ORDER BY date`);
 }
 
 // Money moved between the user's own accounts is neither spending nor income. User edits are never overwritten.
-async function markSelfTransfers(): Promise<void> {
+export async function markSelfTransfers(): Promise<void> {
   const db = await getDb();
-  const rows = await db.getAllAsync<Txn>(
-    `SELECT ${TXN_COLUMNS} FROM transactions WHERE source != 'user' AND kind IN ('spend', 'income')`,
-  );
-  const ids = [...pairSelfTransfers(rows)];
+  const all = await allTransactions();
+  const ids = [...pairSelfTransfers(all, ownKeys(all))];
   await db.withTransactionAsync(async () => {
     for (const id of ids) await db.runAsync("UPDATE transactions SET kind = 'transfer' WHERE id = ?", id);
   });
-}
-
-const FALLBACK_PER_SYNC = 10;
-
-// Unparsed financial messages go to the server model, masked, one per message shape, newest
-// first. The server caps calls per month; a 429 or 503 just means try again on a later sync.
-export async function runFallback(): Promise<number> {
-  const db = await getDb();
-  const rows = await db.getAllAsync<{ id: string; sender: string; body: string; receivedAt: string; templateKey: string }>(
-    `SELECT id, sender, body, receivedAt, templateKey FROM sms_raw
-      WHERE parsedStatus = 'unparsed' AND fallbackAt IS NULL
-      GROUP BY templateKey ORDER BY receivedAt DESC LIMIT ?`,
-    FALLBACK_PER_SYNC,
-  );
-  let parsed = 0;
-  for (const row of rows) {
-    let res: FallbackResponse;
-    try {
-      res = await api<FallbackResponse>('/v1/parse/fallback', {
-        method: 'POST',
-        token: await deviceToken(),
-        body: { sender: row.sender.slice(0, 20), text: maskForFallback(row.body), templateKey: row.templateKey },
-      });
-    } catch (e) {
-      if (e instanceof ApiError && e.status < 500 && e.status !== 429) {
-        await db.runAsync('UPDATE sms_raw SET fallbackAt = ? WHERE id = ?', new Date().toISOString(), row.id);
-        continue;
-      }
-      break;
-    }
-    const t = res.transaction;
-    await db.withTransactionAsync(async () => {
-      await db.runAsync('UPDATE sms_raw SET fallbackAt = ? WHERE id = ?', new Date().toISOString(), row.id);
-      // Checked again here: the amount must be written in the original message.
-      if (!t || !amountsIn(row.body).has(t.amountMinor)) return;
-      await db.runAsync(
-        `INSERT OR IGNORE INTO transactions (id, smsId, date, amountMinor, direction, kind, status, instrument, counterparty, source, rule)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'llm', 'llm')`,
-        `sms:${row.id}`, row.id, row.receivedAt, t.amountMinor, t.type, kindOf(t.type, t.status, row.body), t.status, t.instrument, t.counterparty,
-      );
-      await db.runAsync("UPDATE sms_raw SET parsedStatus = 'parsed', rule = 'llm' WHERE id = ?", row.id);
-      parsed++;
-    });
-  }
-  return parsed;
 }
 
 export type LocalStats = { financial: number; parsed: number; byRule: number; byGeneric: number; byModel: number };
@@ -303,6 +272,8 @@ export async function editTransaction(id: string, edit: TxnEdit): Promise<void> 
       id, edit.field, String(before?.v ?? ''), String(value), new Date().toISOString(),
     );
   });
+  // Marking a payment to one of the user's own names as a transfer marks the others too.
+  if (edit.field === 'kind') await markSelfTransfers();
 }
 
 export type TxnDetail = TxnRow & { source: string; refundExpected: number; body: string | null; sender: string | null };

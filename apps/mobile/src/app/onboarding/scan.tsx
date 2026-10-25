@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ErrorState, ProgressRing, StepScreen, Text } from '@/components';
-import { localStats, runFallback, syncInbox, type SyncProgress } from '@/data/ingest';
+import { runFallback } from '@/data/fallback';
+import { localStats, syncInbox, type SyncProgress } from '@/data/ingest';
 import { track } from '@/lib/device';
 import { space } from '@/theme/tokens';
 
@@ -26,8 +27,9 @@ export default function Scan() {
         seconds: r.seconds,
         ruleRate: stats.financial ? Math.round((100 * (stats.byRule + stats.byGeneric)) / stats.financial) : 0,
       });
-      // Best effort: the model fallback must never hold up or break the scan.
-      await runFallback().catch(() => 0);
+      // Best effort: the model fallback must never hold up or break the scan. The rest of the shapes
+      // go on later syncs, so the scan waits for three rounds at most.
+      await runFallback(12).catch(() => 0);
       return r;
     },
   });

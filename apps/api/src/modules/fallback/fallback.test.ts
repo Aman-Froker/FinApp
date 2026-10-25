@@ -2,6 +2,7 @@ import request from 'supertest';
 import { describe, expect, test, vi } from 'vitest';
 
 import { createApp } from '../../app.js';
+import { env } from '../../config/env.js';
 import { FallbackRequestModel } from '../../models/fallback-request.js';
 import { amountsIn } from '@finapp/parser';
 
@@ -30,7 +31,7 @@ describe('parse fallback', () => {
   test('stops at the monthly cap per device', async () => {
     const app = createApp({ extractor: fake });
     const { deviceId, ...auth } = await device(app);
-    await FallbackRequestModel.insertMany(Array.from({ length: 50 }, () => ({ deviceId, sender: 's', templateKey: 'k', maskedText: 't' })));
+    await FallbackRequestModel.insertMany(Array.from({ length: env.FALLBACK_MONTHLY_CAP }, () => ({ deviceId, sender: 's', templateKey: 'k', maskedText: 't' })));
     const res = await request(app).post('/v1/parse/fallback').set(auth).send(body);
     expect(res.status).toBe(429);
     expect(res.body.error.code).toBe('fallback_cap_reached');

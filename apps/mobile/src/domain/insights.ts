@@ -1,6 +1,6 @@
 // Money Wrapped: the Day 1 insight cards, computed from the user's own transactions and scored
 // per the PRD. Pure functions; the screen only words what is returned here.
-import { detectSalary, monthKey, type Recurring, type Txn } from './detect';
+import { detectSalary, monthKey, payeeOf, type Recurring, type Txn } from './detect';
 
 export type InsightType = 'habit' | 'runway' | 'fees' | 'autopays' | 'limbo' | 'creep';
 
@@ -22,7 +22,7 @@ export type Summary = { totalMinor: number; months: number; top: InsightLine[] }
 const DAY = 86_400_000;
 const time = (t: { date: string }) => Date.parse(t.date);
 const sum = (xs: { amountMinor: number }[]) => xs.reduce((s, x) => s + x.amountMinor, 0);
-const name = (t: Txn) => t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee';
+const name = payeeOf;
 const lineOf = (t: Txn, label = name(t)): InsightLine => ({ id: t.id, label, amountMinor: t.amountMinor, date: t.date });
 const isSpend = (t: Txn) => t.direction === 'debit' && t.kind === 'spend' && t.status === 'success';
 
@@ -64,8 +64,8 @@ const RUNWAY_MARGIN_DAYS = 5;
 
 // The day spending since the previous salary passed that salary, in the last complete pay cycle.
 function runway(txns: Txn[], recurring: Recurring[], now: Date): Insight | null {
-  const salary = detectSalary(recurring, now);
-  if (!salary || salary.txnIds.length < 2) return null;
+  const salary = detectSalary(txns, recurring, now);
+  if (!salary?.sure || salary.txnIds.length < 2) return null;
   const credits = txns.filter((t) => salary.txnIds.includes(t.id)).sort((a, b) => time(a) - time(b));
   const start = credits.at(-2)!;
   const end = credits.at(-1)!;
@@ -84,13 +84,11 @@ function fees(txns: Txn[], months: number): Insight | null {
   return { type: 'fees', totalMinor: sum(hits), months, lines: hits.map((t) => lineOf(t, t.counterparty ?? 'Bank charge')).reverse() };
 }
 
-const AUTOPAY_TYPES = new Set(['emi', 'sip', 'rent', 'autopay', 'subscription']);
-
 function autopays(recurring: Recurring[], now: Date): Insight | null {
   const active = recurring.filter(
     (r) =>
       r.direction === 'debit' &&
-      AUTOPAY_TYPES.has(r.type) &&
+      r.automatic &&
       now.getTime() - Date.parse(r.lastSeen) <= (r.cadence === 'weekly' ? 14 : 45) * DAY,
   );
   if (!active.length) return null;

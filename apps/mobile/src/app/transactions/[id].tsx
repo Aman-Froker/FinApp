@@ -7,6 +7,7 @@ import { editTransaction, transactionDetail, type TxnEdit } from '@/data/ingest'
 import { refreshAll } from '@/data/refresh';
 import { track } from '@/lib/device';
 import { space } from '@/theme/tokens';
+import { payeeOf } from '@/domain/detect';
 
 const HOW_IT_COUNTS: Record<string, string> = {
   spend: 'Counts as spending.',
@@ -48,7 +49,7 @@ export default function TransactionDetail() {
     );
   }
   const debit = t.direction === 'debit';
-  const name = t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee';
+  const name = payeeOf(t);
 
   return (
     <StepScreen>
@@ -58,6 +59,16 @@ export default function TransactionDetail() {
         <Text variant="body" color="textSecondary">
           {[timeOf(t.date), t.accountLast4 ? `Account ending ${t.accountLast4}` : null, t.instrument.toUpperCase()].filter(Boolean).join(' · ')}
         </Text>
+        {t.counterparty && t.counterpartyVpa ? (
+          <Text variant="body" color="textSecondary" selectable>
+            {`UPI ID ${t.counterpartyVpa}`}
+          </Text>
+        ) : null}
+        {t.referenceNo ? (
+          <Text variant="body" color="textSecondary" selectable>
+            {`Reference ${t.referenceNo}`}
+          </Text>
+        ) : null}
         <Text variant="body">{HOW_IT_COUNTS[t.kind]}</Text>
         {t.status === 'failed' ? (
           <Text variant="body" color="textSecondary">

@@ -47,7 +47,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "TZ=Asia/Kolkata jest",
-    "e2e": "scripts/e2e.sh"
+    "e2e": "scripts/e2e.sh",
+    "build:apk": "cd android && SENTRY_DISABLE_AUTO_UPLOAD=true ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a"
   },
   "private": true,
   "jest": {

@@ -13,15 +13,31 @@ import { errorHandler } from './middleware/error-handler.js';
 import { globalLimiter } from './middleware/rate-limit.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { devicesRouter } from './modules/devices/devices.routes.js';
-import { anthropicExtractor, type Extractor } from './modules/fallback/extractor.js';
+import { anthropicExtractor, vertexExtractor, type Extractor } from './modules/fallback/extractor.js';
 import { fallbackRouter } from './modules/fallback/fallback.routes.js';
 import { inboundRouter, inboundWebhook } from './modules/inbound/inbound.routes.js';
 import { merchantsRouter } from './modules/merchants/merchants.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
 import { healthRouter } from './routes/health.js';
 
+// Anthropic when its key is set, otherwise Gemini on Vertex when a service account is set, otherwise
+// no fallback (the endpoint answers 503 and the phone keeps the message for later).
+function defaultExtractor(): Extractor | null {
+  if (env.ANTHROPIC_API_KEY) return anthropicExtractor();
+  if (env.VERTEX_PROJECT_ID && env.VERTEX_CLIENT_EMAIL && env.VERTEX_PRIVATE_KEY) {
+    return vertexExtractor({
+      project: env.VERTEX_PROJECT_ID,
+      location: env.VERTEX_LOCATION,
+      model: env.VERTEX_MODEL,
+      clientEmail: env.VERTEX_CLIENT_EMAIL,
+      privateKey: env.VERTEX_PRIVATE_KEY,
+    });
+  }
+  return null;
+}
+
 export function createApp({
-  extractor = env.ANTHROPIC_API_KEY ? anthropicExtractor() : null,
+  extractor = defaultExtractor(),
 }: { extractor?: Extractor | null } = {}) {
   const app = express();
   app.disable('x-powered-by');

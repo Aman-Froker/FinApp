@@ -30,7 +30,7 @@ const MIN_DUE = new RegExp(String.raw`\bmin(?:imum|\.)? ?(?:amount |amt\.? )?due
 const DUE_DATE = new RegExp(String.raw`\b(?:due (?:date|by|on)|pay(?:able)? by)\b\s*(?:is|of)?\s*[:-]?\s*` + DATE, 'i');
 const CARD = new RegExp(String.raw`\bcard\b[^.]{0,30}?(?:ending(?: with)?|no\.?|XX|\*\*)\s*` + LAST4, 'i');
 
-const MANDATE = /\be-?mandate\b|\bauto-?pay\b|\bstanding instruction\b|\brecurring payment\b/i;
+const MANDATE = /\b(?:e-?)?mandate\b|\bauto-?pay\b|\bstanding instruction\b|\brecurring payment\b/i;
 const SET_UP = /\b(?:registered|created|set ?up|activated|successfully added)\b/i;
 const MANDATE_PAYEE = /\b(?:for|towards|to|with|of)\s+([A-Za-z][A-Za-z0-9 &.'-]{1,40}?)\s+(?:has|have|is|was|of|for|on|successfully|with|via|by|from|up ?to|max)\b/i;
 

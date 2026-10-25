@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { useState } from 'react';
+import { Linking, PermissionsAndroid, Platform } from 'react-native';
 
 import { Button, StepScreen, Text } from '@/components';
 import { setSetting } from '@/data/db';
@@ -12,11 +13,19 @@ const needsAsking = Platform.OS === 'android' && Number(Platform.Version) >= 33;
 
 export default function Notify() {
   const queryClient = useQueryClient();
+  // Android answered no to "Turn on": say so rather than carry on as if the morning number were set.
+  const [refused, setRefused] = useState(false);
 
-  const finish = async (wanted: boolean) => {
-    const result = wanted && needsAsking ? await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS) : null;
-    const on = wanted && (result === null || result === 'granted');
-    track(on ? 'notifications_enabled' : 'notifications_declined', { result: result ?? 'not_asked' });
+  const turnOn = async () => {
+    const result = needsAsking ? await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS) : 'granted';
+    if (result === 'granted') return finish(true);
+    track('notifications_declined', { result });
+    setRefused(true);
+  };
+
+  const finish = async (on: boolean) => {
+    if (on) track('notifications_enabled', { result: 'granted' });
+    else if (!refused) track('notifications_declined', { result: 'not_now' });
     await setSetting('notify.morning', on ? 'yes' : 'no');
     await setSetting('onboarding.at', new Date().toISOString());
     await setSetting('onboarding.done', 'yes');
@@ -28,11 +37,32 @@ export default function Notify() {
     router.replace('/');
   };
 
+  if (refused) {
+    return (
+      <StepScreen
+        actions={
+          <>
+            <Button label="Open Android settings" icon="settings" fullWidth onPress={() => Linking.openSettings()} />
+            <Button label="Continue without it" variant="ghost" fullWidth onPress={() => finish(false)} />
+          </>
+        }
+      >
+        <Text variant="display" accessibilityRole="header">
+          Notifications are off
+        </Text>
+        <Text variant="prose" color="textSecondary">
+          Android is not letting Fin App send notifications, so the 8 AM number cannot arrive. Turn them on under Notifications in Android
+          settings, or carry on and turn them on later from Fin App&apos;s settings.
+        </Text>
+      </StepScreen>
+    );
+  }
+
   return (
     <StepScreen
       actions={
         <>
-          <Button label="Turn on" fullWidth onPress={() => finish(true)} />
+          <Button label="Turn on" fullWidth onPress={turnOn} />
           <Button label="Not now" variant="ghost" fullWidth onPress={() => finish(false)} />
         </>
       }

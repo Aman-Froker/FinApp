@@ -7,6 +7,7 @@ import { loadCards } from '@/data/ingest';
 import { statusOf } from '@/domain/cards';
 import { formatDate, formatMoney } from '@/lib/format';
 import { space } from '@/theme/tokens';
+import { payeeOf } from '@/domain/detect';
 
 const due = (iso: string) => formatDate(new Date(`${iso}T00:00:00`));
 
@@ -64,7 +65,7 @@ export default function CardDetail() {
           {card.spends.map((t) => (
             <TransactionRow
               key={t.id}
-              merchant={t.counterparty ?? t.counterpartyVpa ?? 'Unknown payee'}
+              merchant={payeeOf(t)}
               date={new Date(t.date)}
               money={{ amountMinor: -t.amountMinor, currency: 'INR' }}
               onPress={() => router.push({ pathname: '/transactions/[id]', params: { id: t.id } })}

@@ -1,5 +1,6 @@
 import { getDb, getGoal, getSalary, getSetting, type GoalRow, type SalaryRow } from './db';
-import { balances, loadHistory, notices, runFallback, syncInbox } from './ingest';
+import { runFallback } from './fallback';
+import { balances, loadHistory, notices, syncInbox } from './ingest';
 import { dropEmailTwins, pullEmail } from './email';
 import { lookupShared, matchUpiNotes } from './labels';
 import { alertsFor, plan, type Planned } from '@/domain/alerts';

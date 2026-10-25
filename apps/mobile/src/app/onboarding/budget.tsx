@@ -1,21 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AmountText, Button, Card, Skeleton, StepScreen, Text, useSalaryForm } from '@/components';
 import { setSalary } from '@/data/db';
 import { loadHistory } from '@/data/ingest';
-import { proposeBudget, type BudgetProposal } from '@/domain/detect';
+import { detectSalary, proposeBudget, salaryChoices, type BudgetProposal, type Salary } from '@/domain/detect';
 import { track } from '@/lib/device';
-import { ordinal, plural } from '@/lib/format';
+import { formatDate, ordinal, plural } from '@/lib/format';
 import { space } from '@/theme/tokens';
 
 const monthLabel = (m: string) => new Date(`${m}-15T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 
 export default function Budget() {
   const history = useQuery({ queryKey: ['history'], queryFn: loadHistory });
-  const proposal = history.data ? proposeBudget(history.data.txns, history.data.recurring, new Date()) : undefined;
+  // undefined until answered, null for "None of these".
+  const [picked, setPicked] = useState<Salary | null>();
+  const now = new Date();
+  const detected = history.data ? detectSalary(history.data.txns, history.data.recurring, now) : null;
+  const choices = history.data && !detected?.sure ? salaryChoices(history.data.txns, history.data.recurring, now) : [];
+  const asking = choices.length > 0 && picked === undefined;
+  const salary = detected?.sure ? detected : (picked ?? null);
+  const proposal = history.data ? proposeBudget(history.data.txns, history.data.recurring, now, salary) : undefined;
   const [editRequested, setEditing] = useState(false);
   const noProposal = proposal === null;
   const editing = editRequested || noProposal;
@@ -23,8 +30,13 @@ export default function Budget() {
 
   // With nothing to propose, the screen asks once for take home and pay day.
   useEffect(() => {
-    if (noProposal) track('salary_asked');
-  }, [noProposal]);
+    if (noProposal && !asking) track('salary_asked');
+  }, [noProposal, asking]);
+
+  const pick = (choice: Salary | null) => {
+    track('salary_picked', { picked: choice ? 'one' : 'none', choices: choices.length });
+    setPicked(choice);
+  };
 
   const edit = () => {
     if (proposal) form.prefill({ amountMinor: proposal.amountMinor, payDay: proposal.resetDay });
@@ -50,6 +62,14 @@ export default function Budget() {
       <StepScreen>
         <Skeleton height={38} round={8} />
         <Skeleton height={160} round={16} />
+      </StepScreen>
+    );
+  }
+
+  if (asking) {
+    return (
+      <StepScreen actions={<Button label="None of these" variant="ghost" fullWidth onPress={() => pick(null)} />}>
+        <Choices choices={choices} onPick={pick} />
       </StepScreen>
     );
   }
@@ -105,6 +125,43 @@ function Proposal({ proposal }: { proposal: BudgetProposal }) {
   );
 }
 
+function Choices({ choices, onPick }: { choices: Salary[]; onPick: (s: Salary) => void }) {
+  return (
+    <>
+      <Text variant="display" accessibilityRole="header">
+        Which of these is your salary?
+      </Text>
+      <Text variant="prose" color="textSecondary">
+        Your biggest credits change from month to month, so we are not sure which one is your pay. Tap the one that is.
+      </Text>
+      <Card style={styles.lines}>
+        {choices.map((c) => {
+          const when = c.txnIds.length > 1 ? `${plural(c.txnIds.length, 'credit')}, around the ${ordinal(c.payDay)}` : `Once, on ${formatDate(new Date(c.lastSeen))}`;
+          return (
+            <Pressable
+              key={c.key}
+              onPress={() => onPick(c)}
+              accessibilityRole="button"
+              accessibilityLabel={`${c.label}, ${when}`}
+              style={({ pressed }) => [styles.line, pressed && styles.pressed]}
+            >
+              <View style={styles.grow}>
+                <Text variant="body" numberOfLines={1}>
+                  {c.label}
+                </Text>
+                <Text variant="caption" color="textSecondary">
+                  {when}
+                </Text>
+              </View>
+              <AmountText money={{ amountMinor: c.amountMinor, currency: 'INR' }} />
+            </Pressable>
+          );
+        })}
+      </Card>
+    </>
+  );
+}
+
 function NoHistory() {
   return (
     <>
@@ -123,4 +180,5 @@ const styles = StyleSheet.create({
   lines: { gap: space.md },
   line: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44 },
   grow: { flex: 1, minWidth: 0 },
+  pressed: { opacity: 0.8 },
 });

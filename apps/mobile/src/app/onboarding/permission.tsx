@@ -60,6 +60,10 @@ export default function Permission() {
       <Text variant="prose" color="textSecondary">
         We read the last 12 months to learn your salary, your regular payments and where your money goes.
       </Text>
+      <Text variant="body" color="textSecondary">
+        Android will ask to let Fin App &quot;send and view&quot; SMS. That is Android&apos;s name for the permission: Fin App only reads, and never
+        sends a message.
+      </Text>
       {denied ? (
         <Text variant="body" color="warning" accessibilityLiveRegion="polite">
           {blocked

@@ -20,3 +20,21 @@ export const fallbackResponseSchema = z.object({ transaction: fallbackTransactio
 export type FallbackRequest = z.infer<typeof fallbackRequestSchema>;
 export type FallbackTransaction = z.infer<typeof fallbackTransactionSchema>;
 export type FallbackResponse = z.infer<typeof fallbackResponseSchema>;
+
+// A message shape learned on a phone from one model answer (see learnRule in @finapp/parser). The
+// server checks the pattern with safePattern before storing it.
+export const learnedRuleSchema = z.object({
+  header: z.string().regex(/^[A-Z0-9]{6}$/),
+  pattern: z.string().min(3).max(3000),
+  groups: z.array(z.enum(['amount', 'party'])).min(1).max(2),
+  type: z.enum(['debit', 'credit']),
+  instrument: fallbackTransactionSchema.shape.instrument,
+  status: fallbackTransactionSchema.shape.status,
+});
+
+export const learnedRulesBodySchema = z.object({ rules: z.array(learnedRuleSchema).min(1).max(100) });
+export const learnedRulesResponseSchema = z.object({ rules: z.array(learnedRuleSchema) });
+
+export type LearnedRuleDto = z.infer<typeof learnedRuleSchema>;
+export type LearnedRulesBody = z.infer<typeof learnedRulesBodySchema>;
+export type LearnedRulesResponse = z.infer<typeof learnedRulesResponseSchema>;

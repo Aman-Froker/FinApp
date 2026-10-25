@@ -18,7 +18,17 @@ const schema = z.object({
   SENTRY_DSN: z.string().url().optional().or(z.literal('')),
   // Without a key the parse fallback answers 503 and the phone keeps the message unparsed.
   ANTHROPIC_API_KEY: z.string().optional(),
-  FALLBACK_MONTHLY_CAP: z.coerce.number().int().positive().default(50),
+  FALLBACK_MONTHLY_CAP: z.coerce.number().int().positive().default(300),
+  // Or Gemini on Vertex AI with a service account, used when there is no Anthropic key.
+  VERTEX_PROJECT_ID: z.string().optional(),
+  VERTEX_LOCATION: z.string().default('global'),
+  VERTEX_MODEL: z.string().default('gemini-2.5-flash'),
+  VERTEX_CLIENT_EMAIL: z.string().email().optional(),
+  VERTEX_PRIVATE_KEY: z
+    .string()
+    .optional()
+    // Env files keep the key on one line with literal \n.
+    .transform((k) => k?.replace(/^"|"$/g, '').replace(/\\n/g, '\n')),
   // Email forwarding. Without both, the address and the webhook answer 503.
   INBOUND_DOMAIN: z.string().regex(/^[a-z0-9.-]+\.[a-z]+$/).optional(),
   INBOUND_SECRET: z.string().min(32, 'INBOUND_SECRET must be at least 32 characters').optional(),

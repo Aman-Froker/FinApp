@@ -55,3 +55,9 @@ test('dates are read day first and impossible dates are rejected', () => {
   expect(dateOf('Nov 5, 2026')).toBe('2026-11-05');
   expect(dateOf('31-02-26')).toBeNull();
 });
+
+test('a UPI mandate created at a bank is a new autopay, with its payee and amount', () => {
+  // Masked from a real Axis Bank message.
+  const body = 'Your UPI ASPRESENTED mandate has been successfully created towards Google Play from 12-08-26 to 12-08-31 for INR 650.00 - Axis Bank';
+  expect(notice({ sender: 'AX-AXISBK-S', body, channel: 'sms' })).toEqual({ kind: 'mandate', payee: 'Google Play', amountMinor: 65000 });
+});

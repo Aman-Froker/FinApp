@@ -4,6 +4,7 @@ import { DeviceModel } from '../../models/device.js';
 import { EventModel } from '../../models/event.js';
 import { FallbackRequestModel } from '../../models/fallback-request.js';
 import { InboundItemModel } from '../../models/inbound-item.js';
+import { LearnedRuleModel } from '../../models/learned-rule.js';
 import { MerchantLabelModel } from '../../models/merchant-label.js';
 
 export const devicesRepository = {
@@ -17,6 +18,7 @@ export const devicesRepository = {
     await FallbackRequestModel.deleteMany({ deviceId });
     await MerchantLabelModel.deleteMany({ deviceId });
     await InboundItemModel.deleteMany({ deviceId });
+    await LearnedRuleModel.deleteMany({ deviceId });
     await DeviceModel.deleteOne({ deviceId });
   },
 };
