@@ -1,0 +1,54 @@
+# Sign up through first transaction: a clean install, onboarding, and the daily number with the
+# transaction read from a bank SMS. Run with scripts/e2e.sh, which seeds that SMS first.
+appId: com.amankineticage.finapp
+name: Onboarding to first transaction
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    # Maestro grants everything by default; a new user starts with nothing and sees Android's prompt.
+    permissions:
+      all: deny
+- tapOn: "Get started"
+- tapOn: "Allow SMS access"
+# Android's own permission dialog.
+- tapOn: "Allow"
+- extendedWaitUntil:
+    visible: "Your monthly budget looks like|One question"
+    timeout: 60000
+# With history the app proposes a budget; without it, it asks once.
+- runFlow:
+    when:
+      visible: "One question"
+    commands:
+      - tapOn:
+          id: "take-home"
+      - inputText: "85000"
+      - tapOn:
+          id: "pay-day"
+      - inputText: "1"
+      - tapOn: "Save"
+- runFlow:
+    when:
+      visible: "Looks right"
+    commands:
+      - tapOn: "Looks right"
+# Money Wrapped: step through every card once they are worked out.
+- extendedWaitUntil:
+    visible: "Next|Continue"
+    timeout: 30000
+- repeat:
+    while:
+      notVisible: "Continue"
+    commands:
+      - tapOn: "Next"
+- tapOn: "Continue"
+- tapOn: "Not now"
+- extendedWaitUntil:
+    visible: "Safe to spend today"
+    timeout: 30000
+- assertVisible: "Latest"
+- assertVisible: "DMart E2E"
+- tapOn: "See all"
+- assertVisible: "Transactions"
+- assertVisible: "DMart E2E"

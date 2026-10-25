@@ -1,0 +1,29 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Declared under Google Play's SMS-based money management exception. -->
+  <uses-permission android:name="android.permission.READ_SMS" />
+  <uses-permission android:name="android.permission.RECEIVE_SMS" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <application>
+    <!-- New bank SMS update the number and alerts even while the app is closed. Only the system can send this broadcast. -->
+    <receiver
+      android:name="expo.modules.smsinbox.SmsReceiver"
+      android:exported="true"
+      android:permission="android.permission.BROADCAST_SMS">
+      <intent-filter>
+        <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+      </intent-filter>
+    </receiver>
+    <service android:name="expo.modules.smsinbox.SmsReceivedService" android:exported="false" />
+    <!-- Reads payment notifications from UPI apps for merchant names, once the user turns it on. -->
+    <service
+      android:name="expo.modules.smsinbox.UpiNotificationListener"
+      android:exported="true"
+      android:label="Fin App merchant names"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

@@ -1,0 +1,7 @@
+{
+  "from": "HDFC Bank Credit Cards <emailstatements.cards@hdfcbank.net>",
+  "subject": "Your HDFC Bank Credit Card Statement for October 2026",
+  "text": "",
+  "html": "<html><head><style>td{font-family:Arial}</style></head><body><p>Dear Customer,</p><p>Your HDFC Bank Credit Card statement for the card ending XX5678 has been generated.</p><table><tr><td>Total Amount Due</td><td>&#8377; 18,450.00</td></tr><tr><td>Minimum Amount Due</td><td>&#8377; 920.00</td></tr><tr><td>Payment Due Date</td><td>05-Nov-2026</td></tr></table><p>Please pay on time to avoid late charges.</p></body></html>",
+  "messageId": "<stmt-oct-2026-5678@hdfcbank.net>"
+}

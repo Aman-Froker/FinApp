@@ -1,0 +1,7 @@
+{
+  "from": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+  "subject": "You have done a UPI txn. Check details!",
+  "text": "Dear Customer,\n\nRs.1,499.00 has been debited from account **4321 to VPA bookmyshow@hdfcbank BOOKMYSHOW on 24-10-26. Your UPI transaction reference number is 428192830555.\n\nIf you did not authorize this transaction, please report it immediately.\n\nWarm Regards,\nHDFC Bank",
+  "html": "",
+  "messageId": "<upi-428192830555@hdfcbank.net>"
+}

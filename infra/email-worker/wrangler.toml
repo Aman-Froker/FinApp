@@ -1,0 +1,10 @@
+# Deploy once the domain is on Cloudflare:
+#   1. Email Routing on the domain, catch-all rule "Send to Worker" -> finapp-inbound-email
+#   2. wrangler secret put INBOUND_SECRET   (same value as the API's INBOUND_SECRET)
+#   3. Set API_URL below, then: npx wrangler deploy
+name = "finapp-inbound-email"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+API_URL = "https://api.example.invalid"

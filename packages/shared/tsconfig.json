@@ -1,0 +1,4 @@
+{
+  "extends": "@finapp/config/tsconfig.base.json",
+  "include": ["src"]
+}
