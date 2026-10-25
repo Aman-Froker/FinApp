@@ -17,7 +17,7 @@ Decisions carried from the PRD review:
 - **Local first.** Parsing, storage and every calculation run on the phone in SQLite. The server holds only the parse fallback, the shared merchant map, product events and the delete-all endpoint. Raw SMS never leave the phone; unparsed financial SMS are sent with digits masked.
 - **Anonymous identity in v1.** No sign up before the SMS prompt. The device gets a random identity on first launch. The email and password auth built in Phase 3 stays and is offered only when a feature needs an account that outlives the device (backup, Gmail OAuth, Account Aggregator).
 - **Expo development build, not bare.** The SMS reader, broadcast receiver and notification listener are one small Expo native module in Kotlin with a config plugin. Everything from Phases 2 and 3 is kept.
-- **Fallback model.** Claude Haiku through the API's provider interface, with a per user monthly cap on fallback calls and one call per message template, not per message.
+- **Fallback model.** Behind the API's provider interface: Vertex AI Gemini 2.5 Flash first, Claude Haiku when `ANTHROPIC_API_KEY` is set instead, and a 503 when neither is configured. A per device cap of 300 fallback calls a month, and one call per message shape, not per message (section 11, item 6).
 - **Play Store first.** The SMS declaration, the privacy policy and an internal testing track ship in milestone 0, because rejection is the one risk that stops the product.
 
 Out of scope for v1: manual entry, CSV import, category budgets, the conversational assistant, moving money, credit products, iOS.
@@ -102,6 +102,14 @@ Existing `users`, `refreshtokens` and `auditlogs` stay as built.
 | [PennyWise AI](https://github.com/sarim2000/pennywiseai-tracker) (Kotlin, 602 stars) | AGPL 3.0 | Reference only for which formats exist across 57 institutions. Its code is not copied: AGPL would require releasing our app under AGPL |
 | [transaction_sms_parser](https://pub.dev/packages/transaction_sms_parser) (Dart) | see package | Reference for the 95 UPI handle list and card scheme detection |
 
+**Fallback and learned rules**: a message the rules cannot read, or read without a payee, goes to the fallback model once per message shape, masked (account digits, balances, references and phone numbers removed) and only if it carries a rupee amount. Foreign currency spends stay unread rather than be counted as rupees. The model's amount must appear in the message text, on the server and again on the phone, and a payee name is kept only if it appears in the text too.
+
+Each answer becomes a learned rule (`packages/parser/src/learned.ts`): the message itself with its amount and payee as gaps, and the parts that change between messages widened (digits, spacing, month names, capitalised field values joined by a dash or slash). No digit from the message is kept. A rule must read its own message back to the same answer before it is saved, and `safePattern` accepts only patterns made of literal text and the gap tokens, so a rule cannot backtrack badly. Rules are scoped to the sender header.
+
+On the phone, learned rules live in the `learned_rules` table and read every later message of that shape with no model call. Built-in rules always go first: a learned rule reads a message they cannot, and on a message they read without a payee it adds only the payee, never changing the direction or amount. Phones send their rules to `POST /v1/parse/rules`; `GET /v1/parse/rules` serves a rule to every phone only once two different devices sent the same one, so wording that names one user never reaches anyone else. Phones check shared rules with `safePattern` again before using them, and delete-all removes a device's rules from the server.
+
+Learned rules fill gaps between releases. A shape that shows up across many users should still become a built-in rule with a corpus line.
+
 Shaurya owns the rules and corpus; the pipeline, harness and fallback are built in M0 and M1 so both can proceed in parallel from the contract above.
 
 ## 7. API endpoints for v1
@@ -149,8 +157,8 @@ Decided on 25 October 2026:
    Going live (built in M6, not yet deployed): put the domain on Cloudflare; set the API's `INBOUND_DOMAIN` and a 32+ character `INBOUND_SECRET`; deploy `infra/email-worker` with `wrangler deploy` after `wrangler secret put INBOUND_SECRET` and setting `API_URL`; add an Email Routing catch-all rule sending to the Worker. Push delivery to the phone needs a Firebase project; until then the phone collects email results on each refresh.
 4. **Salary**: no ask. The budget is inferred from the scan and proposed for one-tap acceptance (section 1, item 1).
 5. **Notification time**: fixed 8 AM.
+6. **Fallback model and budget**: Vertex AI Gemini 2.5 Flash first (thinking off, JSON schema output), with Claude Haiku as the alternative behind the same provider interface. The cap is 300 calls per device per month (`FALLBACK_MONTHLY_CAP`), about 0.03 US cents a call. The first scan sends at most 12 shapes and later syncs at most 40, and learned rules (section 6) mean most shapes need one call ever.
 
 Still open, owned by Shaurya:
-6. Shaurya's rules format: TypeScript pattern files in the repo, or a JSON format edited outside it? The harness supports either; TypeScript gives types and tests for free.
-7. Fallback budget: cap of fallback calls per device per month. Proposal: 50, which at Haiku pricing is under one rupee per user.
+7. Shaurya's rules format: TypeScript pattern files in the repo, or a JSON format edited outside it? The harness supports either; TypeScript gives types and tests for free.
 8. Which four UPI apps for the notification listener in M4: Google Pay, PhonePe, Paytm and CRED, or include BHIM and Amazon Pay?
